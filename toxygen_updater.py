@@ -1,36 +1,58 @@
-try:
-    from PySide import QtCore, QtGui
-except ImportError:
-    from PyQt4 import QtCore, QtGui
-import sys
+import os
 import urllib.request
 import os.path
 import zipfile
 import tarfile
 import shutil
-# TODO: add GUI
+import sys
+import subprocess
+import platform
 
 
 def update(url, version):
     log('URL: ' + str(url))
-    req = urllib.request.urlopen(url)
-    data = req.read()
-    file_name = url[url.rindex('/') + 1:]
+
     curr = curr_directory()
+    os.chdir(curr)
+    file_name = url[url.rindex('/') + 1:]
     full_file_name = curr + '/' + file_name
-    with open(file_name, 'wb') as fl:
-        fl.write(data)
+    urllib.request.urlretrieve(url, full_file_name)
+
     if file_name.endswith('.zip'):
         with zipfile.ZipFile(full_file_name) as z:
             z.extractall(curr)
     else:
         with tarfile.TarFile(full_file_name) as z:
             z.extractall(curr)
+    log('Archive extracted')
+
     folder = 'toxygen-{}'.format(version)
-    copy(folder, os.path.abspath(os.path.join(curr, os.pardir)))
+    from_sources = True
+    if not os.path.exists(folder):
+        os.rename('toxygen', folder)
+        from_sources = False
+    folder = curr + '/' + folder
+
+    if not from_sources:
+        copy(folder, curr)
+    else:
+        copy(folder, os.path.abspath(os.path.join(curr, os.pardir)))
+
     os.remove(full_file_name)
     shutil.rmtree(folder)
     log('Installation finished')
+
+    if from_sources:
+        params = 'python3 main.py'
+    elif platform.system() == 'Windows':
+        params = curr + '/toxygen.exe'
+    else:
+        params = './toxygen'
+
+    try:
+        subprocess.Popen(params)
+    except Exception as ex:
+        log('Exception: running Toxygen failed with ' + str(ex))
 
 
 def log(data):
@@ -54,7 +76,9 @@ def copy(src, dest):
             copy(full_file_name, os.path.join(dest, file_name))
 
 if __name__ == '__main__':
-    if len(sys.argv) > 2:
-        url = sys.argv[1]
-        version = sys.argv[2]
-        update(url, version)
+    if len(sys.argv) == 3:
+        download_url = sys.argv[1]
+        new_version = sys.argv[2]
+        update(download_url, new_version)
+    else:
+        print('Usage: toxygen_updater <url> <target_version>')
